@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Foundry Yard — Tactical FPS</title>
+<style>
+  :root { --amber: #e8a33d; --green: #7ec850; --red: #d64545; --panel: rgba(12, 16, 20, 0.72); }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 100%; height: 100%; overflow: hidden; background: #2b3440; font-family: "Segoe UI", system-ui, sans-serif; color: #f2f2f2; }
+  #game { display: block; width: 100%; height: 100%; }
+  .hud { position: fixed; z-index: 5; pointer-events: none; text-shadow: 0 1px 3px rgba(0,0,0,.8); }
+  /* top bar: timer, round, score, teams */
+  #topBar { top: 14px; left: 50%; transform: translateX(-50%); text-align: center; }
+  #hudTimer { font-size: 34px; font-weight: 700; letter-spacing: 2px; }
+  #hudRound { font-size: 12px; letter-spacing: 3px; color: var(--amber); }
+  #hudScore { font-size: 20px; font-weight: 700; margin-top: 2px; }
+  #hudTeam { font-size: 12px; letter-spacing: 1px; opacity: .85; margin-top: 2px; }
+  #bombStatus { font-size: 13px; font-weight: 700; letter-spacing: 1px; margin-top: 4px; }
+  /* bottom-left: health */
+  #healthBox { left: 20px; bottom: 20px; width: 240px; }
+  #hudHealth { font-size: 40px; font-weight: 800; line-height: 1; }
+  .healthLabel { font-size: 11px; letter-spacing: 2px; opacity: .8; }
+  #healthBarWrap { height: 8px; background: rgba(255,255,255,.18); margin-top: 6px; border-radius: 2px; }
+  #healthBar { height: 100%; width: 100%; background: var(--green); border-radius: 2px; transition: width .15s; }
+  /* bottom-right: ammo + money + grenades */
+  #ammoBox { right: 20px; bottom: 20px; text-align: right; }
+  #hudAmmo { font-size: 34px; font-weight: 800; }
+  #hudWeapon { font-size: 12px; letter-spacing: 2px; color: var(--amber); }
+  #hudGrenades { font-size: 15px; color: var(--amber); margin-top: 2px; }
+  #hudMoney { font-size: 18px; font-weight: 700; color: var(--amber); margin-top: 2px; }
+  /* crosshair: four lines whose gap follows spread via --sp */
+  #crosshair { left: 50%; top: 50%; width: 0; height: 0; --sp: 8px; }
+  #crosshair span { position: absolute; background: #fff; box-shadow: 0 0 2px #000; }
+  #crosshair .t { left: -1px; top: calc(-1 * var(--sp) - 8px); width: 2px; height: 8px; }
+  #crosshair .b { left: -1px; top: var(--sp); width: 2px; height: 8px; }
+  #crosshair .l { top: -1px; left: calc(-1 * var(--sp) - 8px); height: 2px; width: 8px; }
+  #crosshair .r { top: -1px; left: var(--sp); height: 2px; width: 8px; }
+  #crosshair .dot { left: -1px; top: -1px; width: 2px; height: 2px; }
+  #hitmarker { left: 50%; top: 50%; transform: translate(-50%, -50%) rotate(45deg); font-size: 26px; font-weight: 900; opacity: 0; color: #fff; }
+  /* banner + feed + help */
+  #banner { left: 50%; top: 30%; transform: translateX(-50%); font-size: 26px; font-weight: 800; letter-spacing: 2px; color: var(--amber); text-align: center; transition: opacity .3s; white-space: nowrap; }
+  #feed { right: 20px; top: 16px; text-align: right; font-size: 13px; line-height: 1.7; opacity: .9; }
+  #helpLine { left: 50%; bottom: 8px; transform: translateX(-50%); font-size: 12px; letter-spacing: 1px; opacity: .65; white-space: nowrap; }
+  /* plant progress */
+  #plantBar { left: 50%; top: 58%; transform: translateX(-50%); width: 260px; height: 10px; background: rgba(255,255,255,.2); display: none; }
+  #plantFill { height: 100%; width: 0; background: var(--amber); }
+  #damageVignette { position: fixed; inset: 0; z-index: 4; pointer-events: none; opacity: 0;
+    background: radial-gradient(ellipse at center, transparent 55%, rgba(200,20,20,.55) 100%); }
+  /* buy menu */
+  #buyMenu { left: 50%; top: 50%; transform: translate(-50%, -50%); width: 460px; background: var(--panel);
+    border: 1px solid rgba(232,163,61,.5); border-radius: 6px; padding: 16px 18px; display: none; pointer-events: auto; z-index: 8; }
+  #buyMenu h2 { font-size: 16px; letter-spacing: 3px; color: var(--amber); margin-bottom: 10px; }
+  .buyRow { display: flex; justify-content: space-between; padding: 9px 10px; margin: 4px 0; background: rgba(255,255,255,.06);
+    border-radius: 4px; cursor: pointer; font-size: 14px; }
+  .buyRow:hover { background: rgba(232,163,61,.25); }
+  .buyStat { opacity: .7; font-size: 12px; }
+  .buyPrice { color: var(--amber); font-weight: 700; }
+  .buyHint { font-size: 12px; opacity: .75; margin-top: 10px; }
+  .buyMsg { font-size: 13px; color: var(--green); margin-top: 4px; min-height: 16px; }
+  /* start / end overlay */
+  #overlay { position: fixed; inset: 0; z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;
+    background: rgba(10, 14, 18, 0.78); text-align: center; padding: 20px; }
+  #overlayTitle { font-size: 46px; font-weight: 900; letter-spacing: 6px; color: var(--amber); }
+  #overlayText { max-width: 560px; margin: 14px 0 22px; font-size: 15px; line-height: 1.6; opacity: .9; }
+  #startBtn { pointer-events: auto; cursor: pointer; font-size: 18px; font-weight: 800; letter-spacing: 3px;
+    padding: 13px 42px; border: 2px solid var(--amber); background: transparent; color: var(--amber); border-radius: 4px; }
+  #startBtn:hover { background: var(--amber); color: #111; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="game"></canvas>
+<div id="damageVignette"></div>
+
+<div class="hud" id="topBar">
+  <div id="hudRound">ROUND 1</div>
+  <div id="hudTimer">1:40</div>
+  <div id="hudScore">0 : 0</div>
+  <div id="hudTeam"></div>
+  <div id="bombStatus"></div>
+</div>
+
+<div class="hud" id="healthBox">
+  <div class="healthLabel">HEALTH</div>
+  <div id="hudHealth">100</div>
+  <div id="healthBarWrap"><div id="healthBar"></div></div>
+</div>
+
+<div class="hud" id="ammoBox">
+  <div id="hudWeapon">P9 SIDEARM</div>
+  <div id="hudAmmo">12 / 48</div>
+  <div id="hudGrenades">○ 0</div>
+  <div id="hudMoney">$800</div>
+</div>
+
+<div class="hud" id="crosshair"><span class="t"></span><span class="b"></span><span class="l"></span><span class="r"></span><span class="dot"></span></div>
+<div class="hud" id="hitmarker">✕</div>
+<div class="hud" id="banner"></div>
+<div class="hud" id="feed"></div>
+<div class="hud" id="plantBar"><div id="plantFill"></div></div>
+<div class="hud" id="helpLine"></div>
+
+<div class="hud" id="buyMenu">
+  <h2>BUY EQUIPMENT</h2>
+  <div id="buyList"></div>
+  <div class="buyMsg" id="buyMsg"></div>
+</div>
+
+<div id="overlay">
+  <div id="overlayTitle">FOUNDRY YARD</div>
+  <div id="overlayText"></div>
+  <button id="startBtn">DEPLOY</button>
+</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
